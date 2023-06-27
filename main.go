@@ -100,21 +100,18 @@ func modelPath(modelName string) string {
 	return filepath.Join(getDataDir(), name)
 }
 
-type blisper struct {
-	model   string
-	infile  string
-	outfile string
-}
-
 // tryConvertToWav will attempt to convert fh to a WAV file of the proper
 // format for whisper.cpp with ffmpeg, if it is not already a WAV file of the
 // proper format.
-func tryConvertToWav(f string) *os.File {
+func tryConvertToWav(f string, verbose bool) *os.File {
 	// TODO: maybe check first if the file is of the right format? Could use
 	// the other wav library to do that? Sample output in ffmpeg-probe.json
 	// p := must(ffmpeg.Probe(f))
 	// fmt.Printf("%s\n", p)
 	// os.Exit(1)
+
+	// ffmpeg module writes to log and to stdout/err, so soak up its output
+	fakeIO := must(fakestdio.New())
 
 	outf := must(os.CreateTemp("", "blisper*.wav"))
 
@@ -124,11 +121,30 @@ func tryConvertToWav(f string) *os.File {
 		"ac":  "1",
 		"c:a": "pcm_s16le",
 	}
+
 	must_(ffmpeg.Input(f).Output(outf.Name(), args).OverWriteOutput().ErrorToStdOut().Run())
 
-	fmt.Printf("wrote %s\n", outf.Name())
+	// reset stdout and stderr, and get ffmpeg's output
+	stdout, stderr, err := fakeIO.ReadAndRestore()
+	if err != nil {
+		panic(err)
+	}
+
+	if verbose {
+		fmt.Printf("ffmpeg output:\n%s\n------\n%s", stdout, stderr)
+	}
+
+	// TODO: Add a verbose mode, and output the wav file's name
+	// fmt.Printf("wrote %s\n", outf.Name())
 
 	return must(os.Open(outf.Name()))
+}
+
+type blisper struct {
+	model   string
+	infile  string
+	outfile string
+	verbose bool
 }
 
 func run(args *blisper) error {
@@ -149,12 +165,16 @@ func run(args *blisper) error {
 
 	// restore stderr and stdout. This returns the stdout and stderr output
 	// respectively, but for now we'll ignore it
-	_, _, err := fakeIO.ReadAndRestore()
+	stdout, stderr, err := fakeIO.ReadAndRestore()
 	if err != nil {
 		panic(err)
 	}
 
-	fh := tryConvertToWav(args.infile)
+	if args.verbose {
+		fmt.Printf("whisper output:\n%s\n------\n%s", stdout, stderr)
+	}
+
+	fh := tryConvertToWav(args.infile, args.verbose)
 
 	// modified from: https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/bindings/go/examples/go-whisper/process.go#L31
 	// Decode the WAV file - load the full buffer
@@ -200,9 +220,10 @@ Use whisper.cpp to transcribe the <input-audio> file into <output-transcript>
 
 OPTIONS
 
-  -model:  the size of the whisper model to use. Defaults to "small"
-  -config: print the config for this app
-  -help:   print this help
+  -model:   the size of the whisper model to use. Defaults to "small"
+  -config:  print the config for this app
+  -help:    print this help
+  -verbose: print verbose output
 
 MODELS
 
@@ -214,10 +235,12 @@ MODELS
 
 func main() {
 	var (
-		model  = flag.String("model", "small", "the model to use")
-		help   = flag.Bool("help", false, "print help")
-		h      = flag.Bool("h", false, "print help")
-		config = flag.Bool("config", false, "print config location")
+		config  = flag.Bool("config", false, "print config location")
+		help    = flag.Bool("help", false, "print help")
+		h       = flag.Bool("h", false, "print help")
+		model   = flag.String("model", "small", "the model to use")
+		verbose = flag.Bool("verbose", false, "verbose output")
+		v       = flag.Bool("v", false, "verbose output")
 	)
 
 	flag.Parse()
@@ -242,5 +265,6 @@ func main() {
 		model:   *model,
 		infile:  os.Args[1],
 		outfile: os.Args[2],
+		verbose: *verbose || *v,
 	})
 }
