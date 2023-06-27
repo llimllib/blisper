@@ -7,3 +7,7 @@ bin/blisper: $(GOFILES)
 .PHONY: watch
 watch:
 	modd
+
+lint:
+	staticcheck ./...
+	go vet ./...
