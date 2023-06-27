@@ -48,13 +48,6 @@ func must[T any](t T, err error) T {
 	return t
 }
 
-func must__[T any, U any](t T, u U, err error) (T, U) {
-	if err != nil {
-		panic(err)
-	}
-	return t, u
-}
-
 // same as the above, but without a value
 func must_(err error) {
 	if err != nil {
