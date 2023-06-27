@@ -1,12 +1,17 @@
 package fakestdio
 
+// TODO: make a version of this that works in windows. I think this answer might help?
+//       https://stackoverflow.com/a/34773942/42559
+//       https://github.com/moby/moby/blob/5f48fc36e158eb63e4cbc220c5bbc784c35f2ae2/cmd/dockerd/service_windows.go#L369
+
 import (
 	"bytes"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // modified from: https://eli.thegreenplace.net/2020/faking-stdin-and-stdout-in-go/
@@ -38,14 +43,14 @@ func New() (*FakeStdOutErr, error) {
 		return nil, err
 	}
 
-	origStdout, err := syscall.Dup(syscall.Stdout)
+	origStdout, err := unix.Dup(unix.Stdout)
 	if err != nil {
 		return nil, err
 	}
 
 	// Clone the pipe's writer to the actual Stdout descriptor; from this point
 	// on, writes to Stdout will go to stdoutWriter.
-	if err = syscall.Dup2(int(stdoutWriter.Fd()), syscall.Stdout); err != nil {
+	if err = unix.Dup2(int(stdoutWriter.Fd()), unix.Stdout); err != nil {
 		return nil, err
 	}
 
@@ -70,14 +75,14 @@ func New() (*FakeStdOutErr, error) {
 		return nil, err
 	}
 
-	origStderr, err := syscall.Dup(syscall.Stderr)
+	origStderr, err := unix.Dup(unix.Stderr)
 	if err != nil {
 		return nil, err
 	}
 
 	// Clone the pipe's writer to the actual Stderr descriptor; from this point
 	// on, writes to Stderr will go to stderrWriter.
-	if err = syscall.Dup2(int(stderrWriter.Fd()), syscall.Stderr); err != nil {
+	if err = unix.Dup2(int(stderrWriter.Fd()), unix.Stderr); err != nil {
 		return nil, err
 	}
 
@@ -116,8 +121,8 @@ func (sf *FakeStdOutErr) ReadAndRestore() ([]byte, []byte, error) {
 	sf.stderrReader.Close()
 	sf.stderrReader = nil
 
-	syscall.Close(syscall.Stdout)
-	syscall.Close(syscall.Stderr)
+	unix.Close(unix.Stdout)
+	unix.Close(unix.Stderr)
 
 	// Close the writer side of the faked stdout pipe. This signals to the
 	// background goroutine that it should exit.
@@ -125,10 +130,10 @@ func (sf *FakeStdOutErr) ReadAndRestore() ([]byte, []byte, error) {
 	stderrBuf := <-sf.stderrCh
 
 	// restore stdout and stderr, and close the dup'ed handles
-	syscall.Dup2(sf.origStdout, syscall.Stdout)
-	syscall.Close(sf.origStdout)
-	syscall.Dup2(sf.origStderr, syscall.Stderr)
-	syscall.Close(sf.origStderr)
+	unix.Dup2(sf.origStdout, unix.Stdout)
+	unix.Close(sf.origStdout)
+	unix.Dup2(sf.origStderr, unix.Stderr)
+	unix.Close(sf.origStderr)
 
 	return stdoutBuf, stderrBuf, nil
 }
