@@ -33,15 +33,15 @@ jobs:
       #    LIBRRARY_PATH: "/whisper"
       - run: "echo $C_INCLUDE_PATH && ls $C_INCLUDE_PATH"
         env:
-          C_INCLUDE_PATH: "${process.env.GITHUB_WORKSPACE}/whisper"
-          LIBRRARY_PATH: "${process.env.GITHUB_WORKSPACE}/whisper"
+          C_INCLUDE_PATH: ${{ github.workspace }}/whisper
+          LIBRRARY_PATH: ${{ github.workspace }}/whisper
       - run: "go vet ./..."
         env:
-          C_INCLUDE_PATH: "${process.env.GITHUB_WORKSPACE}/whisper"
-          LIBRRARY_PATH: "${process.env.GITHUB_WORKSPACE}/whisper"
+          C_INCLUDE_PATH: ${{ github.workspace }}/whisper
+          LIBRRARY_PATH: ${{ github.workspace }}/whisper
       - run: |
           go install honnef.co/go/tools/cmd/staticcheck@latest
           staticcheck ./...
         env:
-          C_INCLUDE_PATH: "${process.env.GITHUB_WORKSPACE}/whisper"
-          LIBRRARY_PATH: "${process.env.GITHUB_WORKSPACE}/whisper"
+          C_INCLUDE_PATH: ${{ github.workspace }}/whisper
+          LIBRRARY_PATH: ${{ github.workspace }}/whisper
