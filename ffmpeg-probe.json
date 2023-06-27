@@ -1,0 +1,61 @@
+{
+  "streams": [
+    {
+      "index": 0,
+      "codec_name": "opus",
+      "codec_long_name": "Opus (Opus Interactive Audio Codec)",
+      "codec_type": "audio",
+      "codec_tag_string": "[0][0][0][0]",
+      "codec_tag": "0x0000",
+      "sample_fmt": "fltp",
+      "sample_rate": "48000",
+      "channels": 2,
+      "channel_layout": "stereo",
+      "bits_per_sample": 0,
+      "initial_padding": 312,
+      "r_frame_rate": "0/0",
+      "avg_frame_rate": "0/0",
+      "time_base": "1/1000",
+      "start_pts": -7,
+      "start_time": "-0.007000",
+      "extradata_size": 19,
+      "disposition": {
+        "default": 1,
+        "dub": 0,
+        "original": 0,
+        "comment": 0,
+        "lyrics": 0,
+        "karaoke": 0,
+        "forced": 0,
+        "hearing_impaired": 0,
+        "visual_impaired": 0,
+        "clean_effects": 0,
+        "attached_pic": 0,
+        "timed_thumbnails": 0,
+        "captions": 0,
+        "descriptions": 0,
+        "metadata": 0,
+        "dependent": 0,
+        "still_image": 0
+      },
+      "tags": {
+        "language": "eng"
+      }
+    }
+  ],
+  "format": {
+    "filename": "/tmp/frank.webm",
+    "nb_streams": 1,
+    "nb_programs": 0,
+    "format_name": "matroska,webm",
+    "format_long_name": "Matroska / WebM",
+    "start_time": "-0.007000",
+    "duration": "295.581000",
+    "size": "4623029",
+    "bit_rate": "125123",
+    "probe_score": 100,
+    "tags": {
+      "encoder": "google/video-file"
+    }
+  }
+}
