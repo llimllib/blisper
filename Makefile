@@ -8,6 +8,7 @@ bin/blisper: $(GOFILES)
 watch:
 	modd
 
+.PHONY: lint
 lint:
 	staticcheck ./...
 	go vet ./...
