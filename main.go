@@ -13,6 +13,7 @@ import (
 
 	"github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
 	"github.com/go-audio/wav"
+	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 // get the name for the data dir
@@ -103,24 +104,51 @@ type blisper struct {
 	outfile string
 }
 
+// tryConvertToWav will attempt to convert fh to a WAV file of the proper
+// format for whisper.cpp with ffmpeg, if it is not already a WAV file of the
+// proper format.
+func tryConvertToWav(f string) *os.File {
+	// TODO: maybe check first if the file is of the right format? Could use
+	// the other wav library to do that? Sample output in ffmpeg-probe.json
+	// p := must(ffmpeg.Probe(f))
+	// fmt.Printf("%s\n", p)
+	// os.Exit(1)
+
+	outf := must(os.CreateTemp("", "blisper*.wav"))
+
+	// $ ffmpeg -i f.webm -ar 16000 -ac 1 -c:a pcm_s16le test.wav
+	args := ffmpeg.KwArgs{
+		"ar":  "16000",
+		"ac":  "1",
+		"c:a": "pcm_s16le",
+	}
+	must_(ffmpeg.Input(f).Output(outf.Name(), args).OverWriteOutput().ErrorToStdOut().Run())
+
+	fmt.Printf("wrote %s\n", outf.Name())
+
+	return must(os.Open(outf.Name()))
+}
+
 func run(args *blisper) error {
 	modelPath := dlModel(args.model)
 
-	// Load the model
+	// Load the model. TODO: hwo do I silence the output?
 	model := must(whisper.New(modelPath))
 	defer model.Close()
 
-	// Process samples
-	context := must(model.NewContext())
+	// fh := must(os.Open(args.infile))
+	// defer fh.Close()
+
+	fh := tryConvertToWav(args.infile)
 
 	// modified from: https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/bindings/go/examples/go-whisper/process.go#L31
-	// TODO: command-line input file
-	fh := must(os.Open(args.infile))
-	defer fh.Close()
-
 	// Decode the WAV file - load the full buffer
 	// TODO: use ffmpeg bindings to generate proper wav files
 	var data []float32 // Samples to process
+
+	context := must(model.NewContext())
+
+	// TODO can I use ffmpeg to do this?
 	dec := wav.NewDecoder(fh)
 	if buf, err := dec.FullPCMBuffer(); err != nil {
 		return err
