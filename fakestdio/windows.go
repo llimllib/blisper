@@ -1,4 +1,9 @@
-//go:build !windows
+//go:build windows
+
+// NOTE that this is completely untested... I'm just guessing what might work
+// based on code samples so far. I have no idea how to even run tests on windows
+//       https://stackoverflow.com/a/34773942/42559
+//       https://github.com/moby/moby/blob/5f48fc36e158eb63e4cbc220c5bbc784c35f2ae2/cmd/dockerd/service_windows.go#L369
 
 package fakestdio
 
@@ -9,17 +14,9 @@ import (
 	"log"
 	"os"
 
-	"golang.org/x/sys/unix"
+	"golang.org/x/sys/windows"
 )
 
-// modified from: https://eli.thegreenplace.net/2020/faking-stdin-and-stdout-in-go/
-//
-// FakeStdio can be used to fake stdin and capture stdout.
-// Between creating a new FakeStdio and calling ReadAndRestore on it,
-// code reading os.Stdin will get the contents of stdinText passed to New.
-// Output to os.Stdout will be captured and returned from ReadAndRestore.
-// FakeStdio is not reusable; don't attempt to use it after calling
-// ReadAndRestore, but it should be safe to create a new FakeStdio.
 type FakeStdOutErr struct {
 	origStdout   int
 	stdoutReader *os.File
@@ -31,24 +28,18 @@ type FakeStdOutErr struct {
 }
 
 func New() (*FakeStdOutErr, error) {
-	// Pipe for stdout.
-	//
-	//               ======
-	//  w ----------->||||------> r
-	// (os.Stdout)   ======      (stdoutReader)
 	stdoutReader, stdoutWriter, err := os.Pipe()
 	if err != nil {
 		return nil, err
 	}
 
-	origStdout, err := unix.Dup(unix.Stdout)
+	origStdout, err := windows.GetStdHandle(windows.STD_OUTPUT_HANDLE)
 	if err != nil {
 		return nil, err
 	}
 
-	// Clone the pipe's writer to the actual Stdout descriptor; from this point
-	// on, writes to Stdout will go to stdoutWriter.
-	if err = unix.Dup2(int(stdoutWriter.Fd()), unix.Stdout); err != nil {
+	err = windows.SetStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(stdoutWriter.Fd()))
+	if err != nil {
 		return nil, err
 	}
 
@@ -63,24 +54,18 @@ func New() (*FakeStdOutErr, error) {
 		stdoutCh <- b.Bytes()
 	}()
 
-	// Pipe for stderr.
-	//
-	//               ======
-	//  w ----------->||||------> r
-	// (os.Stderr)   ======      (stderrReader)
 	stderrReader, stderrWriter, err := os.Pipe()
 	if err != nil {
 		return nil, err
 	}
 
-	origStderr, err := unix.Dup(unix.Stderr)
+	origStderr, err := windows.GetStdHandle(windows.STD_ERROR_HANDLE)
 	if err != nil {
 		return nil, err
 	}
 
-	// Clone the pipe's writer to the actual Stderr descriptor; from this point
-	// on, writes to Stderr will go to stderrWriter.
-	if err = unix.Dup2(int(stderrWriter.Fd()), unix.Stderr); err != nil {
+	err = windows.SetStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(stderrWriter.Fd()))
+	if err != nil {
 		return nil, err
 	}
 
@@ -119,19 +104,17 @@ func (sf *FakeStdOutErr) ReadAndRestore() ([]byte, []byte, error) {
 	sf.stderrReader.Close()
 	sf.stderrReader = nil
 
-	unix.Close(unix.Stdout)
-	unix.Close(unix.Stderr)
+	windows.Close(windows.Stdout)
+	windows.Close(windows.Stderr)
 
 	// Close the writer side of the faked stdout pipe. This signals to the
 	// background goroutine that it should exit.
 	stdoutBuf := <-sf.stdoutCh
 	stderrBuf := <-sf.stderrCh
 
-	// restore stdout and stderr, and close the dup'ed handles
-	unix.Dup2(sf.origStdout, unix.Stdout)
-	unix.Close(sf.origStdout)
-	unix.Dup2(sf.origStderr, unix.Stderr)
-	unix.Close(sf.origStderr)
+	// restore stdout and stderr
+	windows.SetStdHandle(windows.STD_OUTPUT_HANDLE, sf.origStdout)
+	windows.SetStdHandle(windows.STD_ERROR_HANDLE, sf.origStderr)
 
 	return stdoutBuf, stderrBuf, nil
 }
