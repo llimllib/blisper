@@ -100,10 +100,9 @@ func modelPath(modelName string) string {
 	return filepath.Join(getDataDir(), name)
 }
 
-// tryConvertToWav will attempt to convert fh to a WAV file of the proper
-// format for whisper.cpp with ffmpeg, if it is not already a WAV file of the
-// proper format.
-func tryConvertToWav(f string, verbose bool) *os.File {
+// convertToWav will attempt to convert fh to a WAV file of the proper format
+// for whisper.cpp with ffmpeg
+func convertToWav(f string, verbose bool) *os.File {
 	// TODO: maybe check first if the file is of the right format? Could use
 	// the other wav library to do that? Sample output in ffmpeg-probe.json
 	// p := must(ffmpeg.Probe(f))
@@ -132,6 +131,7 @@ func tryConvertToWav(f string, verbose bool) *os.File {
 
 	if verbose {
 		fmt.Printf("ffmpeg output:\n%s\n------\n%s", stdout, stderr)
+		fmt.Printf("wrote wav file %s\n", outf.Name())
 	}
 
 	// TODO: Add a verbose mode, and output the wav file's name
@@ -165,16 +165,17 @@ func run(args *blisper) error {
 
 	// restore stderr and stdout. This returns the stdout and stderr output
 	// respectively, but for now we'll ignore it
-	stdout, stderr, err := fakeIO.ReadAndRestore()
+	_, stderr, err := fakeIO.ReadAndRestore()
 	if err != nil {
 		panic(err)
 	}
 
 	if args.verbose {
-		fmt.Printf("whisper output:\n%s\n------\n%s", stdout, stderr)
+		// whisper only outputs to stderr
+		fmt.Printf("whisper output:\n%s", stderr)
 	}
 
-	fh := tryConvertToWav(args.infile, args.verbose)
+	fh := convertToWav(args.infile, args.verbose)
 
 	// modified from: https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/bindings/go/examples/go-whisper/process.go#L31
 	// Decode the WAV file - load the full buffer
@@ -220,10 +221,10 @@ Use whisper.cpp to transcribe the <input-audio> file into <output-transcript>
 
 OPTIONS
 
-  -model:   the size of the whisper model to use. Defaults to "small"
-  -config:  print the config for this app
-  -help:    print this help
-  -verbose: print verbose output
+  -model:       the size of the whisper model to use. Defaults to "small"
+  -config:      print the config for this app
+  -help, -h:    print this help
+  -verbose, -v: print verbose output
 
 MODELS
 
@@ -255,16 +256,16 @@ func main() {
 		return
 	}
 
-	// args must be <program name> <infile> <outfile>
-	if len(os.Args) != 3 {
+	// args must be <program name> [OPTIONS] <infile> <outfile>
+	if len(os.Args) < 3 {
 		usage()
 		return
 	}
 
 	run(&blisper{
 		model:   *model,
-		infile:  os.Args[1],
-		outfile: os.Args[2],
+		infile:  os.Args[len(os.Args)-2],
+		outfile: os.Args[len(os.Args)-1],
 		verbose: *verbose || *v,
 	})
 }
