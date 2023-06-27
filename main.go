@@ -132,7 +132,16 @@ func tryConvertToWav(f string) *os.File {
 func run(args *blisper) error {
 	modelPath := dlModel(args.model)
 
-	// Load the model. TODO: hwo do I silence the output?
+	// TODO: hwo do I silence the output? This silences it, but also loses stderr entirely (the output doesn't redirect to that file)
+	// newstderr := must(os.Create("/tmp/fuck_that_noise.txt"))
+	// defer newstderr.Close()
+	// os.Stderr.Close()
+	// os.Stderr = newstderr
+	//
+	// it's annoying that whisper.cpp writes directly to stderr without any
+	// possibility of config
+
+	// Load the model.
 	model := must(whisper.New(modelPath))
 	defer model.Close()
 
@@ -182,7 +191,9 @@ Use whisper.cpp to transcribe the <input-audio> file into <output-transcript>
 
 OPTIONS
 
-  -model: The size of model to use. Defaults to small
+  -model:  the size of the whisper model to use. Defaults to "small"
+  -config: print the config for this app
+  -help:   print this help
 
 MODELS
 
@@ -193,18 +204,31 @@ MODELS
 }
 
 func main() {
+	var (
+		model  = flag.String("model", "small", "the model to use")
+		help   = flag.Bool("help", false, "print help")
+		h      = flag.Bool("h", false, "print help")
+		config = flag.Bool("config", false, "print config location")
+	)
+
+	flag.Parse()
+
+	if *help || *h {
+		usage()
+		return
+	}
+
+	if *config {
+		fmt.Printf("Model dir: %s\n", getDataDir())
+		return
+	}
+
+	// args must be <program name> <infile> <outfile>
 	if len(os.Args) != 3 {
 		usage()
 		return
 	}
-	var (
-		model = flag.String("model", "small", "the model to use")
-		help  = flag.Bool("help", false, "print help")
-	)
-	if *help {
-		usage()
-		return
-	}
+
 	run(&blisper{
 		model:   *model,
 		infile:  os.Args[1],
