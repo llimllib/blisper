@@ -17,10 +17,24 @@ jobs:
       - uses: WillAbides/setup-go-faster@v1.7.0
         with:
           go-version: ${{ matrix.go }}
-      - run: "go test ./..."
+      - run: |
+          git clone https://github.com/ggerganov/whisper.cpp.git /whisper
+          cd /whisper/bindings/go
+          make whisper
+      # we don't have any tests yet
+      # - run: "go test ./..."
+      #  env:
+      #    C_INCLUDE_PATH: "/whsiper"
+      #    LIBRRARY_PATH: "/whisper"
       - run: "go vet ./..."
+        env:
+          C_INCLUDE_PATH: "/whsiper"
+          LIBRRARY_PATH: "/whisper"
       - uses: dominikh/staticcheck-action@v1.2.0
         with:
           version: "2022.1.1"
           install-go: false
           cache-key: ${{ matrix.go }}
+        env:
+          C_INCLUDE_PATH: "/whsiper"
+          LIBRRARY_PATH: "/whisper"
