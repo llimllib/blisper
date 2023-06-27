@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"golang.org/x/exp/slog"
-
 	"github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
 	"github.com/go-audio/wav"
 
@@ -97,12 +95,12 @@ func dlModel(name string) string {
 	// https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/models/download-ggml-model.sh#L9
 	src := "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml"
 	uri := fmt.Sprintf("%s-%s.bin", src, name)
-	slog.Info("downloading file", "uri", uri)
+	fmt.Printf("%s\n", yellow(fmt.Sprintf("downloading file %s", uri)))
 	resp := must(http.Get(uri))
 	defer resp.Body.Close()
 
 	must(io.Copy(out, resp.Body))
-	slog.Info("download complete")
+	fmt.Printf("%s\n", yellow("download complete"))
 	return outputFile
 }
 
@@ -214,6 +212,9 @@ func (b *blisper) run() error {
 	context := must(model.NewContext())
 
 	context.ResetTimings()
+	if b.verbose {
+		fmt.Printf("%s\n", yellow("transcribing audio file"))
+	}
 	must_(context.Process(data, nil, nil))
 
 	outf := must(os.Create(b.outfile))
