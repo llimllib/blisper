@@ -136,9 +136,6 @@ func run(args *blisper) error {
 	model := must(whisper.New(modelPath))
 	defer model.Close()
 
-	// fh := must(os.Open(args.infile))
-	// defer fh.Close()
-
 	fh := tryConvertToWav(args.infile)
 
 	// modified from: https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/bindings/go/examples/go-whisper/process.go#L31
