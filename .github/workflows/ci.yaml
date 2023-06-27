@@ -31,6 +31,10 @@ jobs:
       #  env:
       #    C_INCLUDE_PATH: "/whisper"
       #    LIBRRARY_PATH: "/whisper"
+      - run: "echo $C_INCLUDE_PATH && ls $C_INCLUDE_PATH"
+        env:
+          C_INCLUDE_PATH: "${GITHUB_WORKSPACE}/whisper"
+          LIBRRARY_PATH: "${GITHUB_WORKSPACE}/whisper"
       - run: "go vet ./..."
         env:
           C_INCLUDE_PATH: "${GITHUB_WORKSPACE}/whisper"
