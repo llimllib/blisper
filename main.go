@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 
@@ -13,7 +14,6 @@ import (
 
 	"github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
 	"github.com/go-audio/wav"
-	ffmpeg "github.com/u2takey/ffmpeg-go"
 
 	"github.com/llimllib/blisper/fakestdio"
 )
@@ -100,6 +100,19 @@ func modelPath(modelName string) string {
 	return filepath.Join(getDataDir(), name)
 }
 
+func readWav(fh *os.File) ([]float32, error) {
+	dec := wav.NewDecoder(fh)
+	buf, err := dec.FullPCMBuffer()
+	if err != nil {
+		return nil, err
+	} else if dec.SampleRate != whisper.SampleRate {
+		return nil, fmt.Errorf("unsupported sample rate: %d", dec.SampleRate)
+	} else if dec.NumChans != 1 {
+		return nil, fmt.Errorf("unsupported number of channels: %d", dec.NumChans)
+	}
+	return buf.AsFloat32Buffer().Data, nil
+}
+
 // convertToWav will attempt to convert fh to a WAV file of the proper format
 // for whisper.cpp with ffmpeg
 func convertToWav(f string, verbose bool) *os.File {
@@ -109,33 +122,30 @@ func convertToWav(f string, verbose bool) *os.File {
 	// fmt.Printf("%s\n", p)
 	// os.Exit(1)
 
-	// ffmpeg module writes to log and to stdout/err, so soak up its output
-	fakeIO := must(fakestdio.New())
-
 	outf := must(os.CreateTemp("", "blisper*.wav"))
 
-	// $ ffmpeg -i f.webm -ar 16000 -ac 1 -c:a pcm_s16le test.wav
-	args := ffmpeg.KwArgs{
-		"ar":  "16000",
-		"ac":  "1",
-		"c:a": "pcm_s16le",
-	}
+	cmd := exec.Command("ffmpeg",
+		"-y",    // overwrite without asking
+		"-i", f, // input file
+		"-ar", "16000", // 16kHz
+		"-ac", "1", // mono
+		"-c:a", "pcm_s16le", // audio codec
+		outf.Name())
+	stderr := must(cmd.StderrPipe())
+	stdout := must(cmd.StdoutPipe())
+	must_(cmd.Start())
+	out := must(io.ReadAll(stdout))
+	err := must(io.ReadAll(stderr))
+	must_(cmd.Wait())
 
-	must_(ffmpeg.Input(f).Output(outf.Name(), args).OverWriteOutput().ErrorToStdOut().Run())
-
-	// reset stdout and stderr, and get ffmpeg's output
-	stdout, stderr, err := fakeIO.ReadAndRestore()
-	if err != nil {
-		panic(err)
+	if verbose {
+		fmt.Println(cmd.String())
 	}
 
 	if verbose {
-		fmt.Printf("ffmpeg output:\n%s\n------\n%s", stdout, stderr)
+		fmt.Printf("ffmpeg output:\n%s\n------\n%s", out, err)
 		fmt.Printf("wrote wav file %s\n", outf.Name())
 	}
-
-	// TODO: Add a verbose mode, and output the wav file's name
-	// fmt.Printf("wrote %s\n", outf.Name())
 
 	return must(os.Open(outf.Name()))
 }
@@ -147,6 +157,8 @@ type blisper struct {
 	verbose bool
 }
 
+// transcribe an audio file to something srt-ish (format to come later)
+// modified from: https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/bindings/go/examples/go-whisper/process.go#L31
 func run(args *blisper) error {
 	modelPath := dlModel(args.model)
 
@@ -175,26 +187,16 @@ func run(args *blisper) error {
 		fmt.Printf("whisper output:\n%s", stderr)
 	}
 
-	fh := convertToWav(args.infile, args.verbose)
-
-	// modified from: https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/bindings/go/examples/go-whisper/process.go#L31
-	// Decode the WAV file - load the full buffer
-	// TODO: use ffmpeg bindings to generate proper wav files
-	var data []float32 // Samples to process
+	fh := must(os.Open(args.infile))
+	// First just assume it's a properly-formatted wav file
+	data, err := readWav(fh)
+	if err != nil {
+		// if there was an error, try using ffmpeg to convert it to the proper
+		// wav format. If _that_ errors, panic and quit
+		data = must(readWav(convertToWav(args.infile, args.verbose)))
+	}
 
 	context := must(model.NewContext())
-
-	// TODO can I use ffmpeg to do this?
-	dec := wav.NewDecoder(fh)
-	if buf, err := dec.FullPCMBuffer(); err != nil {
-		return err
-	} else if dec.SampleRate != whisper.SampleRate {
-		return fmt.Errorf("unsupported sample rate: %d", dec.SampleRate)
-	} else if dec.NumChans != 1 {
-		return fmt.Errorf("unsupported number of channels: %d", dec.NumChans)
-	} else {
-		data = buf.AsFloat32Buffer().Data
-	}
 
 	context.ResetTimings()
 	must_(context.Process(data, nil, nil))
