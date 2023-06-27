@@ -33,8 +33,8 @@ jobs:
       #    LIBRRARY_PATH: "/whisper"
       - run: "go vet ./..."
         env:
-          C_INCLUDE_PATH: "./whisper"
-          LIBRRARY_PATH: "./whisper"
+          C_INCLUDE_PATH: "/home/runner/work/blisper/blisper/whisper"
+          LIBRRARY_PATH: "/home/runner/work/blisper/blisper/whisper"
       - uses: dominikh/staticcheck-action@v1.2.0
         with:
           version: "2022.1.1"
