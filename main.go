@@ -18,6 +18,15 @@ import (
 	"github.com/llimllib/blisper/fakestdio"
 )
 
+var (
+	YELLOW = "\033[33m"
+	RESET  = "\033[0m"
+)
+
+func yellow(s string) string {
+	return fmt.Sprintf("%s%s%s", YELLOW, s, RESET)
+}
+
 // get the name for the data dir
 func getDataDir() string {
 	var dir string
@@ -43,6 +52,7 @@ func pathExists(path string) bool {
 
 func must[T any](t T, err error) T {
 	if err != nil {
+		fmt.Println(err)
 		panic(err)
 	}
 	return t
@@ -51,6 +61,7 @@ func must[T any](t T, err error) T {
 // same as the above, but without a value
 func must_(err error) {
 	if err != nil {
+		fmt.Println(err)
 		panic(err)
 	}
 }
@@ -100,19 +111,6 @@ func modelPath(modelName string) string {
 	return filepath.Join(getDataDir(), name)
 }
 
-func readWav(fh *os.File) ([]float32, error) {
-	dec := wav.NewDecoder(fh)
-	buf, err := dec.FullPCMBuffer()
-	if err != nil {
-		return nil, err
-	} else if dec.SampleRate != whisper.SampleRate {
-		return nil, fmt.Errorf("unsupported sample rate: %d", dec.SampleRate)
-	} else if dec.NumChans != 1 {
-		return nil, fmt.Errorf("unsupported number of channels: %d", dec.NumChans)
-	}
-	return buf.AsFloat32Buffer().Data, nil
-}
-
 // convertToWav will attempt to convert fh to a WAV file of the proper format
 // for whisper.cpp with ffmpeg
 func convertToWav(f string, verbose bool) *os.File {
@@ -144,10 +142,23 @@ func convertToWav(f string, verbose bool) *os.File {
 
 	if verbose {
 		fmt.Printf("ffmpeg output:\n%s\n------\n%s", out, err)
-		fmt.Printf("wrote wav file %s\n", outf.Name())
+		fmt.Printf("wrote wav file %s\n", yellow(outf.Name()))
 	}
 
 	return must(os.Open(outf.Name()))
+}
+
+func readWav(fh *os.File) ([]float32, error) {
+	dec := wav.NewDecoder(fh)
+	buf, err := dec.FullPCMBuffer()
+	if err != nil {
+		return nil, err
+	} else if dec.SampleRate != whisper.SampleRate {
+		return nil, fmt.Errorf("unsupported sample rate: %d", dec.SampleRate)
+	} else if dec.NumChans != 1 {
+		return nil, fmt.Errorf("unsupported number of channels: %d", dec.NumChans)
+	}
+	return buf.AsFloat32Buffer().Data, nil
 }
 
 type blisper struct {
@@ -159,8 +170,8 @@ type blisper struct {
 
 // transcribe an audio file to something srt-ish (format to come later)
 // modified from: https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/bindings/go/examples/go-whisper/process.go#L31
-func run(args *blisper) error {
-	modelPath := dlModel(args.model)
+func (b *blisper) run() error {
+	modelPath := dlModel(b.model)
 
 	// redirect stderr and stdout to a file. Note that any panics that occur in
 	// here will not be output.
@@ -182,18 +193,22 @@ func run(args *blisper) error {
 		panic(err)
 	}
 
-	if args.verbose {
+	if b.verbose {
 		// whisper only outputs to stderr
 		fmt.Printf("whisper output:\n%s", stderr)
 	}
 
-	fh := must(os.Open(args.infile))
+	fh := must(os.Open(b.infile))
 	// First just assume it's a properly-formatted wav file
 	data, err := readWav(fh)
 	if err != nil {
+		if b.verbose {
+			fmt.Println(err)
+			fmt.Printf("%s\n", yellow("attempting to convert to wav with ffmpeg"))
+		}
 		// if there was an error, try using ffmpeg to convert it to the proper
 		// wav format. If _that_ errors, panic and quit
-		data = must(readWav(convertToWav(args.infile, args.verbose)))
+		data = must(readWav(convertToWav(b.infile, b.verbose)))
 	}
 
 	context := must(model.NewContext())
@@ -201,7 +216,7 @@ func run(args *blisper) error {
 	context.ResetTimings()
 	must_(context.Process(data, nil, nil))
 
-	outf := must(os.Create(args.outfile))
+	outf := must(os.Create(b.outfile))
 	defer outf.Close()
 
 	// Print out the results
@@ -264,10 +279,10 @@ func main() {
 		return
 	}
 
-	run(&blisper{
+	(&blisper{
 		model:   *model,
 		infile:  os.Args[len(os.Args)-2],
 		outfile: os.Args[len(os.Args)-1],
 		verbose: *verbose || *v,
-	})
+	}).run()
 }
