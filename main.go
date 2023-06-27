@@ -14,6 +14,8 @@ import (
 	"github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
 	"github.com/go-audio/wav"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
+
+	"github.com/llimllib/blisper/fakestdio"
 )
 
 // get the name for the data dir
@@ -39,11 +41,18 @@ func pathExists(path string) bool {
 	return err == nil
 }
 
-func must[T any](val T, err error) T {
+func must[T any](t T, err error) T {
 	if err != nil {
 		panic(err)
 	}
-	return val
+	return t
+}
+
+func must__[T any, U any](t T, u U, err error) (T, U) {
+	if err != nil {
+		panic(err)
+	}
+	return t, u
 }
 
 // same as the above, but without a value
@@ -132,18 +141,25 @@ func tryConvertToWav(f string) *os.File {
 func run(args *blisper) error {
 	modelPath := dlModel(args.model)
 
-	// TODO: hwo do I silence the output? This silences it, but also loses stderr entirely (the output doesn't redirect to that file)
-	// newstderr := must(os.Create("/tmp/fuck_that_noise.txt"))
-	// defer newstderr.Close()
-	// os.Stderr.Close()
-	// os.Stderr = newstderr
-	//
-	// it's annoying that whisper.cpp writes directly to stderr without any
-	// possibility of config
+	// redirect stderr and stdout to a file. Note that any panics that occur in
+	// here will not be output.
+	// We do this because whisper writes to stderr without any possibility of
+	// configuring it. This _probably_ doesn't work on windows
+	fakeIO := must(fakestdio.New())
 
+	// it's annoying that whisper.cpp writes directly to stderr without any
+	// possibility of config.
+	// https://github.com/ggerganov/whisper.cpp/issues/504
 	// Load the model.
 	model := must(whisper.New(modelPath))
 	defer model.Close()
+
+	// restore stderr and stdout. This returns the stdout and stderr output
+	// respectively, but for now we'll ignore it
+	_, _, err := fakeIO.ReadAndRestore()
+	if err != nil {
+		panic(err)
+	}
 
 	fh := tryConvertToWav(args.infile)
 
