@@ -83,7 +83,7 @@ func New() (*FakeStdOutErr, error) {
 
 	stderrCh := make(chan []byte)
 
-	// This gorerrine reads stderr into a buffer in the background.
+	// This goroutine reads stderr into a buffer in the background.
 	go func() {
 		var b bytes.Buffer
 		if _, err := io.Copy(&b, stderrReader); err != nil {
