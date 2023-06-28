@@ -86,15 +86,6 @@ func contains[T comparable](arr []T, val T) bool {
 	return false
 }
 
-func in(needle string, haystack []string) bool {
-	for _, v := range haystack {
-		if needle == v {
-			return true
-		}
-	}
-	return false
-}
-
 func dlModel(name string) string {
 	validModels := []string{"tiny.en", "tiny", "base.en", "base", "small.en", "small", "medium.en", "medium", "large-v1", "large"}
 	if !contains(validModels, name) {
@@ -166,12 +157,6 @@ func modelPath(modelName string) string {
 // convertToWav will attempt to convert fh to a WAV file of the proper format
 // for whisper.cpp with ffmpeg
 func convertToWav(f string, verbose bool) *os.File {
-	// TODO: maybe check first if the file is of the right format? Could use
-	// the other wav library to do that? Sample output in ffmpeg-probe.json
-	// p := must(ffmpeg.Probe(f))
-	// fmt.Printf("%s\n", p)
-	// os.Exit(1)
-
 	outf := must(os.CreateTemp("", "blisper*.wav"))
 
 	cmd := exec.Command("ffmpeg",
@@ -371,7 +356,7 @@ func main() {
 	}
 
 	legalFormats := []string{"srt", "ssa", "stl", "ttml", "vtt"}
-	if !in(*format, legalFormats) {
+	if !contains(legalFormats, *format) {
 		fmt.Printf("%s\n", red("Invalid format. Must be one of %v", legalFormats))
 		os.Exit(1)
 	}
