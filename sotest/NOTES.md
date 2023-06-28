@@ -50,3 +50,35 @@ Undefined symbols for architecture arm64:
 ld: symbol(s) not found for architecture arm64
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 ```
+
+---
+
+`blisper` doesn't have whisper listed in `otool -L`, but `sotest` does:
+
+```console
+$ otool -L ./sotest
+./sotest:
+	libwhisper.so (compatibility version 0.0.0, current version 0.0.0)
+	/System/Library/Frameworks/Accelerate.framework/Versions/A/Accelerate (compatibility version 1.0.0, current version 4.0.0)
+	/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 1971.0.0)
+	/usr/lib/libresolv.9.dylib (compatibility version 1.0.0, current version 1.0.0)
+	/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 60420.101.2)
+	/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1319.100.3)
+
+$ otool -L ../bin/blisper
+../bin/blisper:
+	/usr/lib/libresolv.9.dylib (compatibility version 1.0.0, current version 1.0.0)
+	/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1319.100.3)
+	/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 1500.65.0)
+	/System/Library/Frameworks/Accelerate.framework/Versions/A/Accelerate (compatibility version 1.0.0, current version 4.0.0)
+	/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation (compatibility version 150.0.0, current version 1971.0.0)
+	/System/Library/Frameworks/Security.framework/Versions/A/Security (compatibility version 1.0.0, current version 60420.101.2)
+```
+
+How do I get this to build the same way `blisper` is?
+
+---
+
+I tried doing a version where I used the "low-level" bindings provided by ggerganov, which is almost exactly identical, but it's _much_ slower and I don't understand why.
+
+Transcribing the full MLK "I have a dream" with this code takes 24s and with the ggerganov bindings, 32s
