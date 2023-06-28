@@ -29,8 +29,8 @@ jobs:
       # we don't have any tests yet
       # - run: "go test ./..."
       #  env:
-      #    C_INCLUDE_PATH: "/whisper"
-      #    LIBRRARY_PATH: "/whisper"
+      #    C_INCLUDE_PATH: ${{ github.workspace }}/whisper
+      #    LIBRRARY_PATH: ${{ github.workspace }}/whisper
       - run: "echo $C_INCLUDE_PATH && ls $C_INCLUDE_PATH"
         env:
           C_INCLUDE_PATH: ${{ github.workspace }}/whisper
