@@ -212,10 +212,12 @@ func readWav(fh *os.File) ([]float32, error) {
 }
 
 type blisper struct {
-	model   string
-	infile  string
-	outfile string
 	format  string
+	infile  string
+	model   string
+	quiet   bool
+	stream  bool
+	outfile string
 	verbose bool
 }
 
@@ -225,6 +227,9 @@ type blisper struct {
 // originally modified from:
 // https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/bindings/go/examples/go-whisper/process.go#L31
 func (b *blisper) transcribe() error {
+	if !b.quiet {
+		fmt.Printf("%s\n", yellow("loading model"))
+	}
 	modelPath := dlModel(b.model)
 
 	// redirect stderr and stdout to a file. Note that any panics that occur in
@@ -252,6 +257,10 @@ func (b *blisper) transcribe() error {
 		fmt.Printf("whisper output:\n%s", stderr)
 	}
 
+	if !b.quiet {
+		fmt.Printf("%s\n", yellow("preparing audio"))
+	}
+
 	fh := must(os.Open(b.infile))
 	// First just assume it's a properly-formatted wav file
 	data, err := readWav(fh)
@@ -265,12 +274,13 @@ func (b *blisper) transcribe() error {
 		data = must(readWav(convertToWav(b.infile, b.verbose)))
 	}
 
+	if !b.quiet {
+		fmt.Printf("%s\n", yellow("transcribing audio file"))
+	}
+
 	context := must(model.NewContext())
 
 	context.ResetTimings()
-	if b.verbose {
-		fmt.Printf("%s\n", yellow("transcribing audio file"))
-	}
 	must_(context.Process(data, nil, nil))
 
 	outf := must(os.Create(b.outfile))
@@ -294,10 +304,13 @@ func (b *blisper) transcribe() error {
 			}},
 		}
 		subs.Items = append(subs.Items, &item)
+		if b.stream {
+			fmt.Printf("%s->%s %s\n", segment.Start, segment.End, segment.Text)
+		}
 		i += 1
 	}
 
-	if b.verbose {
+	if !b.quiet {
 		fmt.Printf("writing %s with format %s\n",
 			yellow(b.outfile),
 			yellow(b.format))
@@ -330,11 +343,12 @@ Use whisper.cpp to transcribe the <input-audio> file into <output-transcript>
 
 OPTIONS
 
-  -model:       the size of the whisper model to use. Defaults to "small"
-  -config:      print the config for this app
-  -help, -h:    print this help
-  -verbose, -v: print verbose output
-  -format:      the output format to use. Defaults to "srt"
+  -config:       print the config for this app
+  -format <fmt>: the output format to use. Defaults to "srt"
+  -help, -h:     print this help
+  -model:        the size of the whisper model to use. Defaults to "small"
+  -stream:       if passed, stream output to stdout
+  -verbose, -v:  print verbose output
 
 MODELS
 
@@ -355,6 +369,9 @@ func main() {
 		help    = flag.Bool("help", false, "print help")
 		h       = flag.Bool("h", false, "print help")
 		model   = flag.String("model", "small", "the model to use")
+		q       = flag.Bool("q", false, "silence all output")
+		quiet   = flag.Bool("quiet", false, "silence all output")
+		stream  = flag.Bool("stream", false, "stream output to stdout")
 		v       = flag.Bool("v", false, "verbose output")
 		verbose = flag.Bool("verbose", false, "verbose output")
 	)
@@ -387,6 +404,8 @@ func main() {
 		format:  *format,
 		infile:  os.Args[len(os.Args)-2],
 		model:   *model,
+		quiet:   *quiet || *q,
+		stream:  *stream,
 		outfile: os.Args[len(os.Args)-1],
 		verbose: *verbose || *v,
 	}).transcribe()
