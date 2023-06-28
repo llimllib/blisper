@@ -284,14 +284,26 @@ func (b *blisper) transcribe() error {
 	context := must(model.NewContext())
 
 	context.ResetTimings()
-	var cb func(segment whisper.Segment)
+	var eachSegment func(segment whisper.Segment)
 	if b.stream {
-		cb = func(segment whisper.Segment) {
+		eachSegment = func(segment whisper.Segment) {
 			fmt.Printf("%s %s\n", purple("%s->%s", segment.Start, segment.End), segment.Text)
 		}
 	}
 
-	must_(context.Process(data, cb, nil))
+	// TODO: add a progress bar
+	// you can have a progress callback like this:
+	//
+	// var progress func(int)
+	// progress = func(i int) { fmt.Printf("%d\n", i) }
+	//
+	// but the the units you get are unspecified. I think you may need to use
+	// the low-level API and get_n_segments?
+	//
+	// I asked about it here:
+	// https://github.com/ggerganov/whisper.cpp/discussions/1063
+
+	must_(context.Process(data, eachSegment, nil))
 
 	outf := must(os.Create(b.outfile))
 	defer outf.Close()
