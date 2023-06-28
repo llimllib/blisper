@@ -7,12 +7,15 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"syscall"
 
 	"github.com/asticode/go-astisub"
 	"github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
 	"github.com/go-audio/wav"
+	progressbar "github.com/schollz/progressbar/v3"
 
 	"github.com/llimllib/blisper/fakestdio"
 )
@@ -108,17 +111,49 @@ func dlModel(name string) string {
 		return outputFile
 	}
 
-	out := must(os.Create(outputFile))
-	defer out.Close()
-
 	// https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/models/download-ggml-model.sh#L9
 	src := "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml"
 	uri := fmt.Sprintf("%s-%s.bin", src, name)
-	fmt.Printf("%s\n", yellow("downloading file %s", uri))
-	resp := must(http.Get(uri))
+	req := must(http.NewRequest("GET", uri, nil))
+	resp := must(http.DefaultClient.Do(req))
 	defer resp.Body.Close()
 
-	must(io.Copy(out, resp.Body))
+	out := must(os.Create(outputFile))
+	defer out.Close()
+
+	bar := progressbar.DefaultBytes(
+		resp.ContentLength,
+		fmt.Sprintf("downloading %s model", yellow(name)),
+	)
+
+	// handle a sigint while we're downloading
+	done := make(chan bool)
+	go func() {
+		sigchan := make(chan os.Signal, 1)
+		signal.Notify(sigchan, os.Interrupt, syscall.SIGTERM)
+		select {
+		case <-sigchan:
+			// ignore errors here, we've been interrupted and we're on
+			// best-effort at this point. Try to remove the partial download
+			out.Close()
+			os.Remove(outputFile)
+
+			os.Exit(1)
+		case <-done:
+			// the download finished, remove the handler and continue
+			signal.Stop(sigchan)
+			return
+		}
+	}()
+
+	// TODO: if a user ctrl-c's, we should not leave the half-written file
+	// laying around
+	must(io.Copy(io.MultiWriter(out, bar), resp.Body))
+
+	// tell the interrupt handler we finished the download, it doesn't need to
+	// run any longer
+	done <- true
+
 	fmt.Printf("%s\n", yellow("download complete"))
 	return outputFile
 }
