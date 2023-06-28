@@ -4,6 +4,10 @@ GOFILES=$(shell find . -iname '*.go')
 bin/blisper: $(GOFILES)
 	go build -o bin/blisper .
 
+.PHONY: install
+install:
+	go install
+
 .PHONY: watch
 watch:
 	modd
