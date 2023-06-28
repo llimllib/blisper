@@ -23,23 +23,26 @@ import (
 var (
 	YELLOW = "\033[33m"
 	RED    = "\033[31m"
+	PURPLE = "\033[35m"
 	RESET  = "\033[0m"
 )
 
 // yellow returns a formatted string which will print to the console with a
 // yellow color
 func yellow(s string, a ...any) string {
-	fmt_string := fmt.Sprintf("%%s%s", s)
-	args := append([]any{YELLOW}, a...)
-	return fmt.Sprintf(fmt_string, args...) + RESET
+	return YELLOW + fmt.Sprintf(s, a...) + RESET
 }
 
 // red returns a formatted string which will print to the console with a red
 // color
 func red(s string, a ...any) string {
-	fmt_string := fmt.Sprintf("%%s%s", s)
-	args := append([]any{RED}, a...)
-	return fmt.Sprintf(fmt_string, args...) + RESET
+	return RED + fmt.Sprintf(s, a...) + RESET
+}
+
+// purple returns a formatted string which will print to the console with a
+// purple color
+func purple(s string, a ...any) string {
+	return PURPLE + fmt.Sprintf(s, a...) + RESET
 }
 
 // getDataDir returns the name for the dir where blisper should store the
@@ -281,7 +284,14 @@ func (b *blisper) transcribe() error {
 	context := must(model.NewContext())
 
 	context.ResetTimings()
-	must_(context.Process(data, nil, nil))
+	var cb func(segment whisper.Segment)
+	if b.stream {
+		cb = func(segment whisper.Segment) {
+			fmt.Printf("%s %s\n", purple("%s->%s", segment.Start, segment.End), segment.Text)
+		}
+	}
+
+	must_(context.Process(data, cb, nil))
 
 	outf := must(os.Create(b.outfile))
 	defer outf.Close()
@@ -304,9 +314,6 @@ func (b *blisper) transcribe() error {
 			}},
 		}
 		subs.Items = append(subs.Items, &item)
-		if b.stream {
-			fmt.Printf("%s->%s %s\n", segment.Start, segment.End, segment.Text)
-		}
 		i += 1
 	}
 
