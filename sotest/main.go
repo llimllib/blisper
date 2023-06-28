@@ -3,7 +3,8 @@ package main
 // #include <stdio.h>
 // #include <whisper/whisper.h>
 // #cgo CFLAGS: -I ${SRCDIR}/whisper -O3 -DNDEBUG -std=c11   -fPIC -D_XOPEN_SOURCE=600 -pthread -DGGML_USE_ACCELERATE
-// #cgo LDFLAGS: -L ${SRCDIR}/whisper -Wl,-rpath ${SRCDIR}/whisper -lwhisper -framework Accelerate
+// #cgo LDFLAGS: -lwhisper
+// #cgo darwin LDFLAGS: -framework Accelerate
 import "C"
 
 import (
