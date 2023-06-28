@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/asticode/go-astisub"
 	"github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
 	"github.com/go-audio/wav"
 
@@ -18,11 +19,20 @@ import (
 
 var (
 	YELLOW = "\033[33m"
+	RED    = "\033[31m"
 	RESET  = "\033[0m"
 )
 
-func yellow(s string) string {
-	return fmt.Sprintf("%s%s%s", YELLOW, s, RESET)
+func yellow(s string, a ...any) string {
+	fmt_string := fmt.Sprintf("%%s%s", s)
+	args := append([]any{YELLOW}, a...)
+	return fmt.Sprintf(fmt_string, args...) + RESET
+}
+
+func red(s string, a ...any) string {
+	fmt_string := fmt.Sprintf("%%s%s", s)
+	args := append([]any{RED}, a...)
+	return fmt.Sprintf(fmt_string, args...) + RESET
 }
 
 // get the name for the data dir
@@ -73,6 +83,15 @@ func contains[T comparable](arr []T, val T) bool {
 	return false
 }
 
+func in(needle string, haystack []string) bool {
+	for _, v := range haystack {
+		if needle == v {
+			return true
+		}
+	}
+	return false
+}
+
 func dlModel(name string) string {
 	validModels := []string{"tiny.en", "tiny", "base.en", "base", "small.en", "small", "medium.en", "medium", "large-v1", "large"}
 	if !contains(validModels, name) {
@@ -95,7 +114,7 @@ func dlModel(name string) string {
 	// https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/models/download-ggml-model.sh#L9
 	src := "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml"
 	uri := fmt.Sprintf("%s-%s.bin", src, name)
-	fmt.Printf("%s\n", yellow(fmt.Sprintf("downloading file %s", uri)))
+	fmt.Printf("%s\n", yellow("downloading file %s", uri))
 	resp := must(http.Get(uri))
 	defer resp.Body.Close()
 
@@ -163,6 +182,7 @@ type blisper struct {
 	model   string
 	infile  string
 	outfile string
+	format  string
 	verbose bool
 }
 
@@ -220,13 +240,48 @@ func (b *blisper) run() error {
 	outf := must(os.Create(b.outfile))
 	defer outf.Close()
 
-	// Print out the results
+	i := 0
+	subs := astisub.NewSubtitles()
 	for {
 		segment, err := context.NextSegment()
 		if err != nil {
 			break
 		}
-		fmt.Fprintf(outf, "[%6s->%6s] %s\n", segment.Start, segment.End, segment.Text)
+		item := astisub.Item{
+			StartAt: segment.Start,
+			EndAt:   segment.End,
+			Index:   i,
+			Lines: []astisub.Line{{
+				Items: []astisub.LineItem{
+					{Text: segment.Text},
+				},
+			}},
+		}
+		subs.Items = append(subs.Items, &item)
+		i += 1
+	}
+
+	if b.verbose {
+		fmt.Printf("writing %s with format %s\n",
+			yellow(b.outfile),
+			yellow(b.format))
+	}
+
+	switch b.format {
+	case "srt":
+		err = subs.WriteToSRT(outf)
+	case "ssa":
+		err = subs.WriteToSSA(outf)
+	case "stl":
+		err = subs.WriteToSTL(outf)
+	case "ttml":
+		err = subs.WriteToTTML(outf)
+	case "vtt":
+		err = subs.WriteToWebVTT(outf)
+	}
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
 	}
 
 	return nil
@@ -243,23 +298,29 @@ OPTIONS
   -config:      print the config for this app
   -help, -h:    print this help
   -verbose, -v: print verbose output
+  -format:      the output format to use. Defaults to "srt"
 
 MODELS
 
   Valid models are: tiny.en, tiny, base.en, base, small.en, small, medium.en, medium, large-v1, large
 
   Blisper will automatically download a model if you do not already have it on your system
+
+FORMATS
+
+  Valid subtitle formats are srt, ssa, stl, ttml, and vtt. The default format is srt
   `)
 }
 
 func main() {
 	var (
 		config  = flag.Bool("config", false, "print config location")
+		format  = flag.String("format", "srt", "the output format")
 		help    = flag.Bool("help", false, "print help")
 		h       = flag.Bool("h", false, "print help")
 		model   = flag.String("model", "small", "the model to use")
-		verbose = flag.Bool("verbose", false, "verbose output")
 		v       = flag.Bool("v", false, "verbose output")
+		verbose = flag.Bool("verbose", false, "verbose output")
 	)
 
 	flag.Parse()
@@ -274,6 +335,12 @@ func main() {
 		return
 	}
 
+	legalFormats := []string{"srt", "ssa", "stl", "ttml", "vtt"}
+	if !in(*format, legalFormats) {
+		fmt.Printf("%s\n", red("Invalid format. Must be one of %v", legalFormats))
+		os.Exit(1)
+	}
+
 	// args must be <program name> [OPTIONS] <infile> <outfile>
 	if len(os.Args) < 3 {
 		usage()
@@ -281,8 +348,9 @@ func main() {
 	}
 
 	(&blisper{
-		model:   *model,
+		format:  *format,
 		infile:  os.Args[len(os.Args)-2],
+		model:   *model,
 		outfile: os.Args[len(os.Args)-1],
 		verbose: *verbose || *v,
 	}).run()
