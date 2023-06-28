@@ -26,19 +26,24 @@ var (
 	RESET  = "\033[0m"
 )
 
+// yellow returns a formatted string which will print to the console with a
+// yellow color
 func yellow(s string, a ...any) string {
 	fmt_string := fmt.Sprintf("%%s%s", s)
 	args := append([]any{YELLOW}, a...)
 	return fmt.Sprintf(fmt_string, args...) + RESET
 }
 
+// red returns a formatted string which will print to the console with a red
+// color
 func red(s string, a ...any) string {
 	fmt_string := fmt.Sprintf("%%s%s", s)
 	args := append([]any{RED}, a...)
 	return fmt.Sprintf(fmt_string, args...) + RESET
 }
 
-// get the name for the data dir
+// getDataDir returns the name for the dir where blisper should store the
+// users' model files
 func getDataDir() string {
 	var dir string
 	switch {
@@ -56,11 +61,14 @@ func getDataDir() string {
 	return filepath.Join(dir, "blisper")
 }
 
+// pathExists returns true if the path exists, false otherwise
 func pathExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
 
+// must accepts a value and an error, and returns the value if the error is
+// nil. Otherwise, prints the error and panics
 func must[T any](t T, err error) T {
 	if err != nil {
 		fmt.Println(err)
@@ -69,7 +77,8 @@ func must[T any](t T, err error) T {
 	return t
 }
 
-// same as the above, but without a value
+// must_ accepts an error, and prints the error and panics if the error is not
+// nil
 func must_(err error) {
 	if err != nil {
 		fmt.Println(err)
@@ -86,6 +95,9 @@ func contains[T comparable](arr []T, val T) bool {
 	return false
 }
 
+// dlModel accepts a model name and will download the model file into the
+// user's data directory (given by getDataDir) if it does not already exist. It
+// returns the full path of the model file.
 func dlModel(name string) string {
 	validModels := []string{"tiny.en", "tiny", "base.en", "base", "small.en", "small", "medium.en", "medium", "large-v1", "large"}
 	if !contains(validModels, name) {
@@ -137,8 +149,6 @@ func dlModel(name string) string {
 		}
 	}()
 
-	// TODO: if a user ctrl-c's, we should not leave the half-written file
-	// laying around
 	must(io.Copy(io.MultiWriter(out, bar), resp.Body))
 
 	// tell the interrupt handler we finished the download, it doesn't need to
@@ -149,6 +159,8 @@ func dlModel(name string) string {
 	return outputFile
 }
 
+// modelPath returns the full path to the file blisper expects the model for a
+// given name to be in
 func modelPath(modelName string) string {
 	name := fmt.Sprintf("ggml-%s.bin", modelName)
 	return filepath.Join(getDataDir(), name)
@@ -185,6 +197,7 @@ func convertToWav(f string, verbose bool) *os.File {
 	return must(os.Open(outf.Name()))
 }
 
+// readWav reads a wav file and returns its decoded data or an error
 func readWav(fh *os.File) ([]float32, error) {
 	dec := wav.NewDecoder(fh)
 	buf, err := dec.FullPCMBuffer()
@@ -206,9 +219,12 @@ type blisper struct {
 	verbose bool
 }
 
-// transcribe an audio file to something srt-ish (format to come later)
-// modified from: https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/bindings/go/examples/go-whisper/process.go#L31
-func (b *blisper) run() error {
+// transcribe uses whisper.cpp to transcribe the text in an audio file into a
+// subtitle file of variable format
+//
+// originally modified from:
+// https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/bindings/go/examples/go-whisper/process.go#L31
+func (b *blisper) transcribe() error {
 	modelPath := dlModel(b.model)
 
 	// redirect stderr and stdout to a file. Note that any panics that occur in
@@ -373,5 +389,5 @@ func main() {
 		model:   *model,
 		outfile: os.Args[len(os.Args)-1],
 		verbose: *verbose || *v,
-	}).run()
+	}).transcribe()
 }
