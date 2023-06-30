@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -91,46 +92,41 @@ func dlModel(name string) string {
 		return outputFile
 	}
 
+	// create a context that will cancel on interrupt. defer'ing stop
+	// guarantees that when the function exits nothing will be listening
+	// for the signal any longer
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	// https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/models/download-ggml-model.sh#L9
 	src := "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml"
 	uri := fmt.Sprintf("%s-%s.bin", src, name)
-	req := must(http.NewRequest("GET", uri, nil))
+	req := must(http.NewRequestWithContext(ctx, "GET", uri, nil))
 	resp := must(http.DefaultClient.Do(req))
 	defer resp.Body.Close()
 
-	out := must(os.Create(outputFile))
-	defer out.Close()
+	// download to a `<filename>.part` file until the download is successfully complete
+	inProgressDownloadName := outputFile + ".part"
+	out := must(os.Create(inProgressDownloadName))
+	defer os.Remove(inProgressDownloadName)
 
 	bar := progressbar.DefaultBytes(
 		resp.ContentLength,
 		fmt.Sprintf("downloading %s model", yellow(name)),
 	)
 
-	// handle a sigint while we're downloading
-	done := make(chan bool)
-	go func() {
-		sigchan := make(chan os.Signal, 1)
-		signal.Notify(sigchan, os.Interrupt, syscall.SIGTERM)
-		select {
-		case <-sigchan:
-			// ignore errors here, we've been interrupted and we're on
-			// best-effort at this point. Try to remove the partial download
-			out.Close()
-			os.Remove(outputFile)
+	// Check for context.canceled, so that we don't output an unsightly error if
+	// a user cancels the program. If it's any other error, handle as normal
+	_, err := io.Copy(io.MultiWriter(out, bar), resp.Body)
+	if err != context.Canceled {
+		fmt.Println(err)
+		panic(err)
+	} else {
+		os.Exit(1)
+	}
 
-			os.Exit(1)
-		case <-done:
-			// the download finished, remove the handler and continue
-			signal.Stop(sigchan)
-			return
-		}
-	}()
-
-	must(io.Copy(io.MultiWriter(out, bar), resp.Body))
-
-	// tell the interrupt handler we finished the download, it doesn't need to
-	// run any longer
-	done <- true
+	// Download complete. rename the <filename>.part file -> <filename>
+	must_(os.Rename(inProgressDownloadName, outputFile))
 
 	fmt.Printf("%s\n", yellow("download complete"))
 	return outputFile
@@ -367,10 +363,14 @@ func main() {
 	}
 
 	var _model string
-	if *model != modelDefault {
+	if model != nil && *model != modelDefault {
+		fmt.Printf("setting model to %v\n", model)
 		_model = *model
-	} else if *m != modelDefault {
-		_model = *model
+	} else if m != nil && *m != modelDefault {
+		fmt.Printf("setting model to %v\n", m)
+		_model = *m
+	} else {
+		_model = modelDefault
 	}
 
 	run(args{
