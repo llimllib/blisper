@@ -1,12 +1,17 @@
 GOFILES=$(shell find . -iname '*.go')
+LIBWHISPER=$(shell brew --prefix libwhisper)
 # $(info [$(GOFILES)])
 
 bin/blisper: $(GOFILES)
-	go build -o bin/blisper .
+	C_INCLUDE_PATH=$(LIBWHISPER)/include \
+	LIBRARY_PATH=$(LIBWHISPER)/lib \
+		go build -o bin/blisper .
 
 .PHONY: install
 install:
-	go install
+	C_INCLUDE_PATH=$(LIBWHISPER)/include \
+	LIBRARY_PATH=$(LIBWHISPER)/lib \
+		go install
 
 .PHONY: watch
 watch:

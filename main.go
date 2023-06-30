@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -14,11 +13,10 @@ import (
 	"syscall"
 
 	"github.com/asticode/go-astisub"
-	"github.com/ggerganov/whisper.cpp/bindings/go/pkg/whisper"
 	"github.com/go-audio/wav"
 	progressbar "github.com/schollz/progressbar/v3"
 
-	"github.com/llimllib/blisper/fakestdio"
+	whisper "github.com/llimllib/blisper/whisper"
 )
 
 var (
@@ -46,6 +44,15 @@ func purple(s string, a ...any) string {
 	return PURPLE + fmt.Sprintf(s, a...) + RESET
 }
 
+func contains[T comparable](arr []T, val T) bool {
+	for _, v := range arr {
+		if v == val {
+			return true
+		}
+	}
+	return false
+}
+
 // getDataDir returns the name for the dir where blisper should store the
 // users' model files
 func getDataDir() string {
@@ -63,40 +70,6 @@ func getDataDir() string {
 		dir = filepath.Join(dir, ".local", "share")
 	}
 	return filepath.Join(dir, "blisper")
-}
-
-// pathExists returns true if the path exists, false otherwise
-func pathExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
-// must accepts a value and an error, and returns the value if the error is
-// nil. Otherwise, prints the error and panics
-func must[T any](t T, err error) T {
-	if err != nil {
-		fmt.Println(err)
-		panic(err)
-	}
-	return t
-}
-
-// must_ accepts an error, and prints the error and panics if the error is not
-// nil
-func must_(err error) {
-	if err != nil {
-		fmt.Println(err)
-		panic(err)
-	}
-}
-
-func contains[T comparable](arr []T, val T) bool {
-	for _, v := range arr {
-		if v == val {
-			return true
-		}
-	}
-	return false
 }
 
 // dlModel accepts a model name and will download the model file into the
@@ -118,37 +91,46 @@ func dlModel(name string) string {
 		return outputFile
 	}
 
-	// stop downloading if a user interrupts the program
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
 	// https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/models/download-ggml-model.sh#L9
 	src := "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml"
 	uri := fmt.Sprintf("%s-%s.bin", src, name)
-	req := must(http.NewRequestWithContext(ctx, "GET", uri, nil))
+	req := must(http.NewRequest("GET", uri, nil))
 	resp := must(http.DefaultClient.Do(req))
 	defer resp.Body.Close()
 
-	// download to a `<filename>.part` file until the download is successfully complete
-	inProgressDownloadName := outputFile + ".part"
-	out := must(os.Create(inProgressDownloadName))
-	defer os.Remove(inProgressDownloadName)
+	out := must(os.Create(outputFile))
+	defer out.Close()
 
 	bar := progressbar.DefaultBytes(
 		resp.ContentLength,
 		fmt.Sprintf("downloading %s model", yellow(name)),
 	)
 
-	_, err := io.Copy(io.MultiWriter(out, bar), resp.Body)
-	if err != context.Canceled {
-		fmt.Println(err)
-		panic(err)
-	} else {
-		os.Exit(1)
-	}
+	// handle a sigint while we're downloading
+	done := make(chan bool)
+	go func() {
+		sigchan := make(chan os.Signal, 1)
+		signal.Notify(sigchan, os.Interrupt, syscall.SIGTERM)
+		select {
+		case <-sigchan:
+			// ignore errors here, we've been interrupted and we're on
+			// best-effort at this point. Try to remove the partial download
+			out.Close()
+			os.Remove(outputFile)
 
-	// rename the <filename>.part file -> <filename>
-	must_(os.Rename(inProgressDownloadName, outputFile))
+			os.Exit(1)
+		case <-done:
+			// the download finished, remove the handler and continue
+			signal.Stop(sigchan)
+			return
+		}
+	}()
+
+	must(io.Copy(io.MultiWriter(out, bar), resp.Body))
+
+	// tell the interrupt handler we finished the download, it doesn't need to
+	// run any longer
+	done <- true
 
 	fmt.Printf("%s\n", yellow("download complete"))
 	return outputFile
@@ -192,13 +174,37 @@ func convertToWav(f string, verbose bool) *os.File {
 	return must(os.Open(outf.Name()))
 }
 
+// pathExists returns true if the path exists, false otherwise
+func pathExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// must accepts a value and an error, and returns the value if the error is
+// nil. Otherwise, prints the error and panics
+func must[T any](t T, err error) T {
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
+	}
+	return t
+}
+
+// must_ accepts an error, and prints and panics if present
+func must_(err error) {
+	if err != nil {
+		fmt.Println(err)
+		panic(err)
+	}
+}
+
 // readWav reads a wav file and returns its decoded data or an error
 func readWav(fh *os.File) ([]float32, error) {
 	dec := wav.NewDecoder(fh)
 	buf, err := dec.FullPCMBuffer()
 	if err != nil {
 		return nil, err
-	} else if dec.SampleRate != whisper.SampleRate {
+	} else if dec.SampleRate != uint32(whisper.SAMPLE_RATE) {
 		return nil, fmt.Errorf("unsupported sample rate: %d", dec.SampleRate)
 	} else if dec.NumChans != 1 {
 		return nil, fmt.Errorf("unsupported number of channels: %d", dec.NumChans)
@@ -206,107 +212,47 @@ func readWav(fh *os.File) ([]float32, error) {
 	return buf.AsFloat32Buffer().Data, nil
 }
 
-type blisper struct {
-	format  string
-	infile  string
-	model   string
-	quiet   bool
-	stream  bool
-	outfile string
-	verbose bool
-}
-
-// transcribe uses whisper.cpp to transcribe the text in an audio file into a
-// subtitle file of variable format
-//
-// originally modified from:
-// https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/bindings/go/examples/go-whisper/process.go#L31
-func (b *blisper) transcribe() error {
-	if !b.quiet {
+func run(args args) {
+	if !args.quiet {
 		fmt.Printf("%s\n", yellow("loading model"))
 	}
-	modelPath := dlModel(b.model)
+	modelPath := dlModel(args.model)
 
-	// redirect stderr and stdout to a file. Note that any panics that occur in
-	// here will not be output.
-	// We do this because whisper writes to stderr without any possibility of
-	// configuring it. This _probably_ doesn't work on windows
-	fakeIO := must(fakestdio.New())
-
-	// it's annoying that whisper.cpp writes directly to stderr without any
-	// possibility of config.
-	// https://github.com/ggerganov/whisper.cpp/issues/504
-	// Load the model.
-	model := must(whisper.New(modelPath))
-	defer model.Close()
-
-	// restore stderr and stdout. This returns the stdout and stderr output
-	// respectively, but for now we'll ignore it
-	_, stderr, err := fakeIO.ReadAndRestore()
-	if err != nil {
-		panic(err)
-	}
-
-	if b.verbose {
-		// whisper only outputs to stderr
-		fmt.Printf("whisper output:\n%s", stderr)
-	}
-
-	if !b.quiet {
+	if !args.quiet {
 		fmt.Printf("%s\n", yellow("preparing audio"))
 	}
 
-	fh := must(os.Open(b.infile))
+	fh := must(os.Open(args.infile))
 	// First just assume it's a properly-formatted wav file
-	data, err := readWav(fh)
+	samples, err := readWav(fh)
 	if err != nil {
-		if b.verbose {
+		if args.verbose {
 			fmt.Println(err)
 			fmt.Printf("%s\n", yellow("attempting to convert to wav with ffmpeg"))
 		}
 		// if there was an error, try using ffmpeg to convert it to the proper
 		// wav format. If _that_ errors, panic and quit
-		data = must(readWav(convertToWav(b.infile, b.verbose)))
+		samples = must(readWav(convertToWav(args.infile, args.verbose)))
 	}
 
-	if !b.quiet {
+	if !args.quiet {
 		fmt.Printf("%s\n", yellow("transcribing audio file"))
 	}
 
-	context := must(model.NewContext())
+	segments := (&whisper.Whisper{
+		Model:   modelPath,
+		Quiet:   args.quiet,
+		Stream:  args.stream,
+		Verbose: args.verbose,
+	}).Transcribe(samples)
 
-	context.ResetTimings()
-	var eachSegment func(segment whisper.Segment)
-	if b.stream {
-		eachSegment = func(segment whisper.Segment) {
-			fmt.Printf("%s %s\n", purple("%s->%s", segment.Start, segment.End), segment.Text)
-		}
-	}
-
-	// TODO: add a progress bar
-	// you can have a progress callback like this:
-	//
-	// var progress func(int)
-	// progress = func(i int) { fmt.Printf("%d\n", i) }
-	//
-	// but the the units you get are unspecified. I think you may need to use
-	// the low-level API and get_n_segments?
-	//
-	// I asked about it here:
-	// https://github.com/ggerganov/whisper.cpp/discussions/1063
-
-	must_(context.Process(data, eachSegment, nil))
-
-	outf := must(os.Create(b.outfile))
+	outf := must(os.Create(args.outfile))
 	defer outf.Close()
 
 	i := 0
 	subs := astisub.NewSubtitles()
-	for {
-		segment, err := context.NextSegment()
-		if err != nil {
-			break
-		}
+	for _, segment := range segments {
+
 		item := astisub.Item{
 			StartAt: segment.Start,
 			EndAt:   segment.End,
@@ -321,13 +267,13 @@ func (b *blisper) transcribe() error {
 		i += 1
 	}
 
-	if !b.quiet {
+	if !args.quiet {
 		fmt.Printf("writing %s with format %s\n",
-			yellow(b.outfile),
-			yellow(b.format))
+			yellow(args.outfile),
+			yellow(args.format))
 	}
 
-	switch b.format {
+	switch args.format {
 	case "srt":
 		err = subs.WriteToSRT(outf)
 	case "ssa":
@@ -339,12 +285,17 @@ func (b *blisper) transcribe() error {
 	case "vtt":
 		err = subs.WriteToWebVTT(outf)
 	}
-	if err != nil {
-		fmt.Println(err)
-		panic(err)
-	}
+}
 
-	return nil
+type args struct {
+	// Format re
+	format  string
+	infile  string
+	model   string
+	quiet   bool
+	stream  bool
+	outfile string
+	verbose bool
 }
 
 func usage() {
@@ -411,13 +362,13 @@ func main() {
 		return
 	}
 
-	(&blisper{
+	run(args{
 		format:  *format,
 		infile:  os.Args[len(os.Args)-2],
 		model:   *model,
+		outfile: os.Args[len(os.Args)-1],
 		quiet:   *quiet || *q,
 		stream:  *stream,
-		outfile: os.Args[len(os.Args)-1],
 		verbose: *verbose || *v,
-	}).transcribe()
+	})
 }
