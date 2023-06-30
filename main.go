@@ -204,7 +204,7 @@ func readWav(fh *os.File) ([]float32, error) {
 	buf, err := dec.FullPCMBuffer()
 	if err != nil {
 		return nil, err
-	} else if dec.SampleRate != uint32(whisper.SAMPLE_RATE) {
+	} else if dec.SampleRate != whisper.SAMPLE_RATE {
 		return nil, fmt.Errorf("unsupported sample rate: %d", dec.SampleRate)
 	} else if dec.NumChans != 1 {
 		return nil, fmt.Errorf("unsupported number of channels: %d", dec.NumChans)
@@ -212,41 +212,8 @@ func readWav(fh *os.File) ([]float32, error) {
 	return buf.AsFloat32Buffer().Data, nil
 }
 
-func run(args args) {
-	if !args.quiet {
-		fmt.Printf("%s\n", yellow("loading model"))
-	}
-	modelPath := dlModel(args.model)
-
-	if !args.quiet {
-		fmt.Printf("%s\n", yellow("preparing audio"))
-	}
-
-	fh := must(os.Open(args.infile))
-	// First just assume it's a properly-formatted wav file
-	samples, err := readWav(fh)
-	if err != nil {
-		if args.verbose {
-			fmt.Println(err)
-			fmt.Printf("%s\n", yellow("attempting to convert to wav with ffmpeg"))
-		}
-		// if there was an error, try using ffmpeg to convert it to the proper
-		// wav format. If _that_ errors, panic and quit
-		samples = must(readWav(convertToWav(args.infile, args.verbose)))
-	}
-
-	if !args.quiet {
-		fmt.Printf("%s\n", yellow("transcribing audio file"))
-	}
-
-	segments := (&whisper.Whisper{
-		Model:   modelPath,
-		Quiet:   args.quiet,
-		Stream:  args.stream,
-		Verbose: args.verbose,
-	}).Transcribe(samples)
-
-	outf := must(os.Create(args.outfile))
+func writeSubs(outFilepath string, segments []whisper.Segment, format string) error {
+	outf := must(os.Create(outFilepath))
 	defer outf.Close()
 
 	i := 0
@@ -267,24 +234,59 @@ func run(args args) {
 		i += 1
 	}
 
+	switch format {
+	case "srt":
+		return subs.WriteToSRT(outf)
+	case "ssa":
+		return subs.WriteToSSA(outf)
+	case "stl":
+		return subs.WriteToSTL(outf)
+	case "ttml":
+		return subs.WriteToTTML(outf)
+	case "vtt":
+		return subs.WriteToWebVTT(outf)
+	}
+
+	return nil
+}
+
+func run(args args) {
+	if !args.quiet {
+		fmt.Printf("%s\n", yellow("loading model"))
+	}
+	modelPath := dlModel(args.model)
+
+	if !args.quiet {
+		fmt.Printf("%s\n", yellow("preparing audio"))
+	}
+
+	fh := must(os.Open(args.infile))
+	// First just assume it's a properly-formatted wav file
+	samples, err := readWav(fh)
+	if err != nil {
+		// if there was an error, try using ffmpeg to convert it to the proper
+		// wav format. If _that_ errors, panic and quit
+		if args.verbose {
+			fmt.Println(err)
+			fmt.Printf("%s\n", yellow("attempting to convert to wav with ffmpeg"))
+		}
+		samples = must(readWav(convertToWav(args.infile, args.verbose)))
+	}
+
+	if !args.quiet {
+		fmt.Printf("%s\n", yellow("transcribing audio file"))
+	}
+
+	whisper := whisper.New(modelPath, !args.verbose)
+	segments := must(whisper.Transcribe(samples))
+
 	if !args.quiet {
 		fmt.Printf("writing %s with format %s\n",
 			yellow(args.outfile),
 			yellow(args.format))
 	}
 
-	switch args.format {
-	case "srt":
-		err = subs.WriteToSRT(outf)
-	case "ssa":
-		err = subs.WriteToSSA(outf)
-	case "stl":
-		err = subs.WriteToSTL(outf)
-	case "ttml":
-		err = subs.WriteToTTML(outf)
-	case "vtt":
-		err = subs.WriteToWebVTT(outf)
-	}
+	must_(writeSubs(args.outfile, segments, args.format))
 }
 
 type args struct {
