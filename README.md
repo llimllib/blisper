@@ -1,6 +1,6 @@
 # Blisper
 
-A [whisper.cpp](https://github.com/ggerganov/whisper.cpp/tree/master) CLI wrapper in go.
+Transcribe audio files to text very rapidly
 
 ## building
 
@@ -18,7 +18,7 @@ Use whisper.cpp to transcribe the <input-audio> file into <output-transcript>
 OPTIONS
 
   -config:       print the config for this app
-  -format <fmt>: the output format to use. Defaults to "srt"
+  -format <fmt>: the output format to use. Defaults to "txt"
   -help, -h:     print this help
   -model, -m:    the name of the whisper model to use. Defaults to "small"
   -stream:       if passed, stream output to stdout
@@ -32,18 +32,22 @@ MODELS
 
 FORMATS
 
-  Valid subtitle formats are srt, ssa, stl, ttml, and vtt. The default format is srt
+  Valid subtitle formats are srt, ssa, stl, ttml, txt, and vtt. The default format is txt
 ```
 
 ## status
 
-It's currently functional, but the golang API for whisper.cpp is incomplete and slow; it won't do parallel processing and it lacks advanced functionality not exposed in the API.
+alpha. Basically functional but not yet easy to download and build
 
 There are general discussions about the API in [this thread](https://github.com/ggerganov/whisper.cpp/discussions/312)
 
 The main reason I want my own CLI for whsiper is that the binary built by `make` in the whisper.cpp repository expects you to manage your own models; I think that's cumbersome and user-unfriendly. Ideally I'd like to have a binary that can be `brew install`ed, and this repository is a step towards it.
 
 However, until the go binary can do parallel processing and access more of the functionality in whisper.cpp, I don't think this will reach a high enough level of quality to make it workable.
+
+## thanks
+
+many thanks to @ggerganov for [whisper.cpp](https://github.com/ggerganov/whisper.cpp/tree/master)
 
 ## TODO
 

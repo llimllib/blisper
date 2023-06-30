@@ -210,9 +210,26 @@ func readWav(fh *os.File) ([]float32, error) {
 	return buf.AsFloat32Buffer().Data, nil
 }
 
+func writeText(segments []whisper.Segment, outf *os.File) error {
+	for _, segment := range segments {
+		// TODO: output the durations in a consistent-width format to make it
+		// easier to read
+		_, err := fmt.Fprintf(outf, "[%s -> %s]  %s", segment.Start, segment.End, segment.Text)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func writeSubs(outFilepath string, segments []whisper.Segment, format string) error {
 	outf := must(os.Create(outFilepath))
 	defer outf.Close()
+
+	// No need for astisub to write text
+	if format == "txt" {
+		return writeText(segments, outf)
+	}
 
 	i := 0
 	subs := astisub.NewSubtitles()
@@ -306,7 +323,7 @@ Use whisper.cpp to transcribe the <input-audio> file into <output-transcript>
 OPTIONS
 
   -config:       print the config for this app
-  -format <fmt>: the output format to use. Defaults to "srt"
+  -format <fmt>: the output format to use. Defaults to "txt"
   -help, -h:     print this help
   -model, -m:    the name of the whisper model to use. Defaults to "small"
   -stream:       if passed, stream output to stdout
@@ -320,7 +337,7 @@ MODELS
 
 FORMATS
 
-  Valid subtitle formats are srt, ssa, stl, ttml, and vtt. The default format is srt
+  Valid subtitle formats are srt, ssa, stl, ttml, txt, and vtt. The default format is txt
   `)
 }
 
@@ -328,7 +345,7 @@ func main() {
 	modelDefault := "small"
 	var (
 		config  = flag.Bool("config", false, "print config location")
-		format  = flag.String("format", "srt", "the output format")
+		format  = flag.String("format", "txt", "the output format")
 		help    = flag.Bool("help", false, "print help")
 		h       = flag.Bool("h", false, "print help")
 		model   = flag.String("model", modelDefault, "the model to use")
@@ -352,7 +369,7 @@ func main() {
 		return
 	}
 
-	legalFormats := []string{"srt", "ssa", "stl", "ttml", "vtt"}
+	legalFormats := []string{"srt", "ssa", "stl", "ttml", "vtt", "txt"}
 	if !contains(legalFormats, *format) {
 		fmt.Printf("%s\n", red("Invalid format. Must be one of %v", legalFormats))
 		os.Exit(1)
