@@ -358,21 +358,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	// args must be <program name> [OPTIONS] <infile> <outfile>
-	if len(os.Args) < 3 {
-		usage()
-		return
-	}
-
 	var _model string
-	if model != nil && *model != modelDefault {
+	if *model != modelDefault {
 		fmt.Printf("setting model to %v\n", model)
 		_model = *model
-	} else if m != nil && *m != modelDefault {
+	} else if *m != modelDefault {
 		fmt.Printf("setting model to %v\n", m)
 		_model = *m
 	} else {
 		_model = modelDefault
+	}
+
+	// args must be <infile> <outfile>
+	if len(flag.Args()) != 2 {
+		fmt.Printf("%s\n\n", red("Missing argument. Must have [<infile>, <outfile>], got %v", flag.Args()))
+		usage()
+		return
 	}
 
 	run(args{
