@@ -118,11 +118,13 @@ func dlModel(name string) string {
 	// Check for context.canceled, so that we don't output an unsightly error if
 	// a user cancels the program. If it's any other error, handle as normal
 	_, err := io.Copy(io.MultiWriter(out, bar), resp.Body)
-	if err != context.Canceled {
-		fmt.Println(err)
-		panic(err)
-	} else {
-		os.Exit(1)
+	if err != nil {
+		if err != context.Canceled {
+			fmt.Println(err)
+			panic(err)
+		} else {
+			os.Exit(1)
+		}
 	}
 
 	// Download complete. rename the <filename>.part file -> <filename>
