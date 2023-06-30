@@ -310,7 +310,7 @@ OPTIONS
   -config:       print the config for this app
   -format <fmt>: the output format to use. Defaults to "srt"
   -help, -h:     print this help
-  -model:        the size of the whisper model to use. Defaults to "small"
+  -model, -m:    the name of the whisper model to use. Defaults to "small"
   -stream:       if passed, stream output to stdout
   -verbose, -v:  print verbose output
 
@@ -327,12 +327,14 @@ FORMATS
 }
 
 func main() {
+	modelDefault := "small"
 	var (
 		config  = flag.Bool("config", false, "print config location")
 		format  = flag.String("format", "srt", "the output format")
 		help    = flag.Bool("help", false, "print help")
 		h       = flag.Bool("h", false, "print help")
-		model   = flag.String("model", "small", "the model to use")
+		model   = flag.String("model", modelDefault, "the model to use")
+		m       = flag.String("m", modelDefault, "the model to use")
 		q       = flag.Bool("q", false, "silence all output")
 		quiet   = flag.Bool("quiet", false, "silence all output")
 		stream  = flag.Bool("stream", false, "stream output to stdout")
@@ -364,10 +366,17 @@ func main() {
 		return
 	}
 
+	var _model string
+	if *model != modelDefault {
+		_model = *model
+	} else if *m != modelDefault {
+		_model = *model
+	}
+
 	run(args{
 		format:  *format,
 		infile:  os.Args[len(os.Args)-2],
-		model:   *model,
+		model:   _model,
 		outfile: os.Args[len(os.Args)-1],
 		quiet:   *quiet || *q,
 		stream:  *stream,

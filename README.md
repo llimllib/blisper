@@ -4,18 +4,14 @@ A [whisper.cpp](https://github.com/ggerganov/whisper.cpp/tree/master) CLI wrappe
 
 ## building
 
-To build
+Blisper currently only supports building on systems with homebrew.
 
-- clone [whisper.cpp](https://github.com/ggerganov/whisper.cpp/tree/master)
-- from the `bindings/go` directory of that repo, run `make whisper`
-  - This will build `libwhisper.a` into the root directory of that repository
-- set the `C_INCLUDE_PATH` and `LIBRARY_PATH` environment variables to the directory where you cloned whisper.cpp
-- run `make`
+To build, run `brew install llimllib/whisper/libwhisper && make`
 
 ## usage
 
 ```
-	fmt.Println(`Usage: blisper [OPTIONS] <input-audio> <output-transcript>
+Usage: blisper [OPTIONS] <input-audio> <output-transcript>
 
 Use whisper.cpp to transcribe the <input-audio> file into <output-transcript>
 
@@ -24,7 +20,7 @@ OPTIONS
   -config:       print the config for this app
   -format <fmt>: the output format to use. Defaults to "srt"
   -help, -h:     print this help
-  -model:        the size of the whisper model to use. Defaults to "small"
+  -model, -m:    the name of the whisper model to use. Defaults to "small"
   -stream:       if passed, stream output to stdout
   -verbose, -v:  print verbose output
 
@@ -51,13 +47,9 @@ However, until the go binary can do parallel processing and access more of the f
 
 ## TODO
 
-- figure out how to build whisper.cpp as a `.so` shared library file that can be distributed along with the repository, so users don't have to clone it and build it themselves
-  - some discussion [here](https://github.com/ggerganov/whisper.cpp/discussions/312#discussioncomment-6271170) and [here](https://github.com/ggerganov/whisper.cpp/discussions/312#discussioncomment-6271439)
-  - there is a `libwhsiper.so` target in the Makefile [here](https://github.com/ggerganov/whisper.cpp/blob/master/Makefile#L255)
-- see how far I could get by using the "low-level" go binding rather than the high-level one
-  - can parallel processing be succesfully enabled? It's currently [disabled here](https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/bindings/go/pkg/whisper/context.go#L169)
 - stream data from the WAV into the processing function, rather than doing it all in batch
   - would save memory and increase speed
+    - unless crossing the C boundary would be too costly
 - more configuration options
   - smaller chunks
   - [here are the options](https://github.com/ggerganov/whisper.cpp/blob/72deb41eb26300f71c50febe29db8ffcce09256c/examples/main/main.cpp#L118) the default binary supports
