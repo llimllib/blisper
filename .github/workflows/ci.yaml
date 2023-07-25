@@ -38,4 +38,5 @@ jobs:
           LIBRRARY_PATH: ${{ github.workspace }}/libwhisper
       - run: "make lint"
         env:
-          LIBWHISPER: ${{ github.workspace }}/libwhisper
+          C_INCLUDE_PATH: ${{ github.workspace }}/libwhisper
+          LIBRRARY_PATH: ${{ github.workspace }}/libwhisper
