@@ -2,18 +2,20 @@ GOFILES = $(shell find . -iname '*.go')
 # $(info [$(GOFILES)])
 
 LIBWHISPER ?= $(shell brew --prefix libwhisper)
+C_INCLUDE_PATH ?= $(LIBWHISPER)/include
+LIBRARY_PATH ?= $(LIBWHISPER)/lib
 
-# export tells make to pass the variables to all subshells
-# https://www.gnu.org/software/make/manual/html_node/Variables_002fRecursion.html
-export C_INCLUDE_PATH = $(LIBWHISPER)/include
-export LIBRARY_PATH = $(LIBWHISPER)/lib
+$(info LIBWHISPER:     $(LIBWHISPER))
+$(info C_INCLUDE_PATH: $(C_INCLUDE_PATH))
+$(info LIBRARY_PATH:   $(LIBRARY_PATH))
+$(info  )
 
 bin/blisper: $(GOFILES)
-	go build -o bin/blisper .
+	C_INCLUDE_PATH=${C_INCLUDE_PATH} LIBRARY_PATH=${LIBRARY_PATH} go build -o bin/blisper .
 
 .PHONY: install
 install:
-	go install
+	C_INCLUDE_PATH=${C_INCLUDE_PATH} LIBRARY_PATH=${LIBRARY_PATH} go install
 
 .PHONY: watch
 watch:
@@ -23,6 +25,6 @@ watch:
 lint:
 	# install statticcheck if not installed
 	if ! command -v staticcheck &>/dev/null; then go install honnef.co/go/tools/cmd/staticcheck@latest; fi
-	@printf "C_INCLUDE_PATH: %s | LIBRARY_PATH: %s\n" $$C_INCLUDE_PATH $$LIBRARY_PATH
-	staticcheck ./...
-	go vet ./...
+	C_INCLUDE_PATH=${C_INCLUDE_PATH} LIBRARY_PATH=${LIBRARY_PATH} \
+		staticcheck ./... && \
+		go vet ./...
