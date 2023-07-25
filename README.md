@@ -2,6 +2,12 @@
 
 Transcribe audio files to text very rapidly
 
+## install with homebrew
+
+`brew install llimllib/whisper/blisper`
+
+I would love help packaging it for other package managers, but this is the only one I use so that's the only one I've made a package for at the moment.
+
 ## building
 
 Blisper currently only supports building on systems with homebrew.
