@@ -23,5 +23,6 @@ watch:
 lint:
 	# install statticcheck if not installed
 	if ! command -v staticcheck &>/dev/null; then go install honnef.co/go/tools/cmd/staticcheck@latest; fi
+	@printf "C_INCLUDE_PATH: %s | LIBRARY_PATH: %s\n" $$C_INCLUDE_PATH $$LIBRARY_PATH
 	staticcheck ./...
 	go vet ./...
