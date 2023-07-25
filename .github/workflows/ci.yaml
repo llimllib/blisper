@@ -19,13 +19,13 @@ jobs:
           fetch-depth: 1
           repository: ggerganov/whisper.cpp
           ref: v1.3.0
-          path: whisper
+          path: libwhisper
       - uses: WillAbides/setup-go-faster@v1.8.0
         with:
           go-version: ${{ matrix.go }}
       - run: |
-          cd whisper/bindings/go
-          make whisper
+          cd libwhisper/bindings/go
+          make libwhisper
       # we don't have any tests yet
       # - run: "go test ./..."
       #  env:
@@ -33,15 +33,6 @@ jobs:
       #    LIBRRARY_PATH: ${{ github.workspace }}/whisper
       - run: "echo $C_INCLUDE_PATH && ls $C_INCLUDE_PATH"
         env:
-          C_INCLUDE_PATH: ${{ github.workspace }}/whisper
-          LIBRRARY_PATH: ${{ github.workspace }}/whisper
-      - run: "go vet ./..."
-        env:
-          C_INCLUDE_PATH: ${{ github.workspace }}/whisper
-          LIBRRARY_PATH: ${{ github.workspace }}/whisper
-      - run: |
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          staticcheck ./...
-        env:
-          C_INCLUDE_PATH: ${{ github.workspace }}/whisper
-          LIBRRARY_PATH: ${{ github.workspace }}/whisper
+          C_INCLUDE_PATH: ${{ github.workspace }}/libwhisper
+          LIBRRARY_PATH: ${{ github.workspace }}/libwhisper
+      - run: "make lint LIBWHISPER=${{ github.workspace }}/libwhisper"
