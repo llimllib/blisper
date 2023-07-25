@@ -17,7 +17,7 @@ import (
 	"github.com/go-audio/wav"
 	progressbar "github.com/schollz/progressbar/v3"
 
-	whisper "github.com/llimllib/blisper/whisper"
+	"github.com/llimllib/blisper/whisper"
 )
 
 var (
@@ -41,6 +41,7 @@ func red(s string, a ...any) string {
 
 // purple returns a formatted string which will print to the console with a
 // purple color
+//lint:ignore U1000 no current uses, still want it
 func purple(s string, a ...any) string {
 	return PURPLE + fmt.Sprintf(s, a...) + RESET
 }

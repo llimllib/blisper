@@ -70,7 +70,7 @@ func (b *Whisper) Transcribe(samples []float32) ([]Segment, error) {
 		(C.struct_whisper_full_params)(wparams),
 		(*C.float)(&samples[0]),
 		C.int(len(samples))); res != 0 {
-		return nil, fmt.Errorf("Failure to convert, code %d", res)
+		return nil, fmt.Errorf("failure to convert, code %d", res)
 	}
 
 	// https://github.com/ggerganov/whisper.cpp/blob/72deb41e/bindings/go/pkg/whisper/context.go#L203
