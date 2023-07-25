@@ -24,8 +24,9 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
       - run: |
-          cd libwhisper/bindings/go
-          make libwhisper
+          # build the whisper static library
+          cd libwhisper
+          make libwhisper.a
       # we don't have any tests yet
       # - run: "go test ./..."
       #  env:
