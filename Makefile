@@ -1,17 +1,19 @@
 GOFILES=$(shell find . -iname '*.go')
-LIBWHISPER=$(shell brew --prefix libwhisper)
 # $(info [$(GOFILES)])
 
+LIBWHISPER=$(shell brew --prefix libwhisper)
+
+# export tells make to pass the variables to all subshells
+# https://www.gnu.org/software/make/manual/html_node/Variables_002fRecursion.html
+export C_INCLUDE_PATH=$(LIBWHISPER)/include
+export LIBRARY_PATH=$(LIBWHISPER)/lib
+
 bin/blisper: $(GOFILES)
-	C_INCLUDE_PATH=$(LIBWHISPER)/include \
-	LIBRARY_PATH=$(LIBWHISPER)/lib \
-		go build -o bin/blisper .
+	go build -o bin/blisper .
 
 .PHONY: install
 install:
-	C_INCLUDE_PATH=$(LIBWHISPER)/include \
-	LIBRARY_PATH=$(LIBWHISPER)/lib \
-		go install
+	go install
 
 .PHONY: watch
 watch:
@@ -19,6 +21,7 @@ watch:
 
 .PHONY: lint
 lint:
-	C_INCLUDE_PATH=$(LIBWHISPER)/include \
-		staticcheck ./...
+	# install statticcheck if not installed
+	if ! command -v staticcheck &>/dev/null; then go install honnef.co/go/tools/cmd/staticcheck@latest; fi
+	staticcheck ./...
 	go vet ./...
