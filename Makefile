@@ -1,12 +1,12 @@
-GOFILES=$(shell find . -iname '*.go')
+GOFILES = $(shell find . -iname '*.go')
 # $(info [$(GOFILES)])
 
-LIBWHISPER=$(shell brew --prefix libwhisper)
+LIBWHISPER ?= $(shell brew --prefix libwhisper)
 
 # export tells make to pass the variables to all subshells
 # https://www.gnu.org/software/make/manual/html_node/Variables_002fRecursion.html
-export C_INCLUDE_PATH=$(LIBWHISPER)/include
-export LIBRARY_PATH=$(LIBWHISPER)/lib
+export C_INCLUDE_PATH = $(LIBWHISPER)/include
+export LIBRARY_PATH = $(LIBWHISPER)/lib
 
 bin/blisper: $(GOFILES)
 	go build -o bin/blisper .
